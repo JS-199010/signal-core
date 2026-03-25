@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGNAL_CORE v2 | AI 合約信號站</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<style>
+:root {
+  --bg: #060a10;
+  --surface: #0b1218;
+  --surface2: #0f1a24;
+  --border: #162230;
+  --border2: #1e3040;
+  --accent: #00e5ff;
+  --accent2: #0099bb;
+  --green: #00ff88;
+  --red: #ff3b5c;
+  --yellow: #ffd166;
+  --purple: #b47fff;
+  --muted: #3a5068;
+  --muted2: #507088;
+  --text: #c8dce8;
+  --text2: #8aa8c0;
+  --mono: 'Share Tech Mono', monospace;
+  --sans: 'Rajdhani', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* scanline overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px);
+  pointer-events: none; z-index: 999;
+}
+
+/* grid bg */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none; z-index: 0;
+}
+
+.container { max-width: 1280px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+
+/* ── TAB NAV ── */
+.tab-nav {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.tab-btn {
+  padding: 10px 24px;
+  background: transparent;
+  border: none; border-bottom: 2px solid transparent;
+  color: var(--muted2);
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 3px;
+  cursor: pointer; transition: all 0.2s;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── HEADER ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+}
+.logo-title { font-family: var(--mono); font-size: 1.4rem; color: var(--accent); letter-spacing: 4px; }
+.logo-sub { font-size: 0.65rem; color: var(--muted); letter-spacing: 3px; margin-top: 3px; font-family: var(--mono); }
+.logo-version { font-size: 0.55rem; color: var(--accent2); letter-spacing: 2px; margin-top: 2px; font-family: var(--mono); }
+
+.header-right { display: flex; align-items: center; gap: 14px; }
+.status-text { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+.status-dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.gear-btn {
+  width: 36px; height: 36px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; font-size: 1rem; position: relative;
+}
+.gear-btn:hover { border-color: var(--accent); color: var(--accent); }
+.gear-btn.unconfigured::after {
+  content: ''; position: absolute; top: 5px; right: 5px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--yellow); box-shadow: 0 0 6px var(--yellow);
+}
+
+/* ── SETTINGS PANEL ── */
+.settings-overlay {
+  position: fixed; inset: 0; background: rgba(4,8,16,0.75);
+  z-index: 200; opacity: 0; pointer-events: none;
+  transition: opacity 0.3s; backdrop-filter: blur(3px);
+}
+.settings-overlay.open { opacity: 1; pointer-events: all; }
+
+.settings-panel {
+  position: fixed; top: 0; right: 0;
+  width: 420px; max-width: 95vw; height: 100vh;
+  background: #08111c; border-left: 1px solid var(--border);
+  z-index: 201; transform: translateX(100%);
+  transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.settings-panel.open { transform: translateX(0); }
+
+.settings-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.4); flex-shrink: 0;
+}
+.settings-title { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); letter-spacing: 3px; }
+.close-btn {
+  width: 28px; height: 28px; border-radius: 5px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+}
+.close-btn:hover { color: var(--red); border-color: var(--red); }
+
+.settings-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+
+.setting-group { display: flex; flex-direction: column; gap: 7px; }
+.setting-group-label {
+  font-family: var(--mono); font-size: 0.6rem; color: var(--accent);
+  letter-spacing: 3px; text-transform: uppercase;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.setting-hint { font-family: var(--mono); font-size: 0.66rem; color: var(--muted); line-height: 1.5; }
+
+.config-input {
+  width: 100%; background: rgba(0,229,255,0.03);
+  border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); font-family: var(--mono); font-size: 0.8rem;
+  padding: 9px 12px; outline: none; transition: border-color 0.2s;
+}
+.config-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,229,255,0.06); }
+select.config-input option { background: #0d1520; }
+
+/* Mode selector chips */
+.chip-group { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 5px 12px; border-radius: 4px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted2); font-family: var(--mono); font-size: 0.65rem;
+  letter-spacing: 1px; cursor: pointer; transition: all 0.2s;
+}
+.chip:hover { border-color: var(--accent2); color: var(--accent); }
+.chip.active { border-color: var(--accent); background: rgba(0,229,255,0.08); color: var(--accent); }
+.chip.active-green { border-color: var(--green); background: rgba(0,255,136,0.08); color: var(--green); }
+.chip.active-red { border-color: var(--red); background: rgba(255,59,92,0.08); color: var(--red); }
+.chip.active-yellow { border-color: var(--yellow); background: rgba(255,209,102,0.08); color: var(--yellow); }
+
+.save-btn {
+  width: 100%; padding: 11px;
+  background: transparent; border: 1px solid var(--accent); border-radius: 5px;
+  color: var(--accent); font-family: var(--mono); font-size: 0.78rem;
+  letter-spacing: 3px; cursor: pointer; transition: all 0.2s; margin-top: 4px;
+}
+.save-btn:hover { background: var(--accent); color: var(--bg); }
+
+.settings-saved-badge {
+  text-align: center; font-family: var(--mono); font-size: 0.66rem;
+  color: var(--green); letter-spacing: 2px; opacity: 0;
+  transition: opacity 0.3s; height: 16px;
+}
+.settings-saved-badge.show { opacity: 1; }
+
+/* slider */
+.slider-wrap { display: flex; align-items: center; gap: 12px; }
+.slider-wrap input[type=range] {
+  flex: 1; -webkit-appearance: none; height: 3px;
+  background: var(--border); border-radius: 2px; outline: none;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--accent); cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,229,255,0.4);
+}
+.slider-val { font-family: var(--mono); font-size: 0.78rem; color: var(--accent); min-width: 36px; text-align: right; }
+
+/* ── ACTION BAR ── */
+.action-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+
+.analyze-btn {
+  flex: 1; padding: 13px;
+  background: transparent; border: 1px solid var(--accent); border-radius: 7px;
+  color: var(--accent); font-family: var(--mono); font-size: 0.88rem;
+  letter-spacing: 3px; cursor: pointer; position: relative; overflow: hidden;
+  transition: all 0.3s;
+}
+.analyze-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--accent); transform: translateX(-100%);
+  transition: transform 0.3s; z-index: -1;
+}
+.analyze-btn:hover { color: var(--bg); box-shadow: 0 0 24px rgba(0,229,255,0.2); }
+.analyze-btn:hover::before { transform: translateX(0); }
+.analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.auto-wrap {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 13px; white-space: nowrap;
+}
+.schedule-toggle {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 0.7rem; color: var(--muted);
+  cursor: pointer; user-select: none; transition: color 0.2s;
+}
+.schedule-toggle.active { color: var(--green); }
+.toggle-dot {
+  width: 26px; height: 14px; border-radius: 7px;
+  background: var(--border); position: relative; transition: background 0.2s;
+}
+.toggle-dot::after {
+  content: ''; position: absolute;
+  width: 9px; height: 9px; background: var(--muted);
+  border-radius: 50%; top: 2.5px; left: 2.5px; transition: all 0.2s;
+}
+.schedule-toggle.active .toggle-dot { background: rgba(0,255,136,0.2); }
+.schedule-toggle.active .toggle-dot::after { background: var(--green); left: 14.5px; }
+
+.interval-select {
+  background: transparent; border: none;
+  color: var(--muted); font-family: var(--mono); font-size: 0.7rem;
+  outline: none; cursor: pointer;
+}
+.interval-select option { background: #0d1520; }
+#nextRunLabel { font-family: var(--mono); font-size: 0.66rem; color: rgba(0,229,255,0.5); }
+
+/* ── MODE BADGE BAR ── */
+.mode-bar {
+  display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.mode-tag {
+  padding: 4px 11px; border-radius: 3px;
+  font-family: var(--mono); font-size: 0.6rem; letter-spacing: 2px;
+  border: 1px solid; opacity: 0.85;
+}
+
+/* ── LOG PANEL ── */
+.log-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 11px 15px; margin-bottom: 20px;
+}
+.log-title { font-family: var(--mono); font-size: 0.6rem; color: var(--accent); letter-spacing: 3px; margin-bottom: 7px; }
+.log-entries { max-height: 90px; overflow-y: auto; font-family: var(--mono); font-size: 0.7rem; }
+.log-entry { color: var(--muted); padding: 2px 0; }
+.log-entry .ts { color: rgba(0,229,255,0.3); margin-right: 8px; }
+.log-entry .ok { color: var(--green); }
+.log-entry .err { color: var(--red); }
+.log-entry .info { color: var(--accent); }
+.log-entry .warn { color: var(--yellow); }
+
+/* ── MARKET CARDS ── */
+.markets-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+.market-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; overflow: hidden;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.market-card.long { border-color: rgba(0,255,136,0.3); box-shadow: 0 0 20px rgba(0,255,136,0.06); }
+.market-card.short { border-color: rgba(255,59,92,0.3); box-shadow: 0 0 20px rgba(255,59,92,0.06); }
+
+.market-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 17px; border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.25);
+}
+.market-symbol { font-family: var(--mono); font-size: 0.95rem; color: #fff; letter-spacing: 2px; }
+.market-price { font-family: var(--mono); font-size: 1.2rem; color: var(--accent); }
+
+.signal-badge {
+  padding: 4px 11px; border-radius: 4px;
+  font-family: var(--mono); font-size: 0.72rem; font-weight: bold; letter-spacing: 2px;
+}
+.signal-badge.long { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.2); }
+.signal-badge.short { background: rgba(255,59,92,0.1); color: var(--red); border: 1px solid rgba(255,59,92,0.2); }
+.signal-badge.neutral { background: rgba(255,209,102,0.1); color: var(--yellow); border: 1px solid rgba(255,209,102,0.2); }
+.signal-badge.loading { background: rgba(58,80,104,0.2); color: var(--muted); border: 1px solid var(--border); }
+
+.market-body { padding: 13px 17px; }
+.stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin-bottom: 11px; }
+.stat-item { background: rgba(0,0,0,0.2); border-radius: 5px; padding: 8px; text-align: center; }
+.stat-label { font-family: var(--mono); font-size: 0.56rem; color: var(--muted); letter-spacing: 2px; display: block; margin-bottom: 3px; }
+.stat-value { font-family: var(--mono); font-size: 0.84rem; color: var(--text); }
+.stat-value.up { color: var(--green); }
+.stat-value.down { color: var(--red); }
+
+.trade-levels { display: flex; flex-direction: column; gap: 5px; margin-bottom: 11px; }
+.level-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; border-radius: 4px; background: rgba(0,0,0,0.15);
+}
+.level-row.entry { border-left: 2px solid var(--accent); }
+.level-row.sl { border-left: 2px solid var(--red); }
+.level-row.tp { border-left: 2px solid var(--green); }
+.level-name { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 2px; }
+.level-value { font-family: var(--mono); font-size: 0.84rem; color: var(--text); }
+
+.confidence-bar-wrap { margin: 7px 0 5px; }
+.confidence-label { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.6rem; color: var(--muted); margin-bottom: 4px; }
+.confidence-track { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.confidence-fill { height: 100%; border-radius: 2px; transition: width 1s ease; }
+.confidence-fill.long { background: var(--green); }
+.confidence-fill.short { background: var(--red); }
+.confidence-fill.neutral { background: var(--yellow); }
+
+.analysis-text { font-size: 0.82rem; line-height: 1.7; color: var(--text2); border-top: 1px solid var(--border); padding-top: 9px; }
+
+/* Log trade button on card */
+.log-trade-btn {
+  width: 100%; margin-top: 10px; padding: 7px;
+  background: transparent; border: 1px dashed var(--border2);
+  border-radius: 5px; color: var(--muted); font-family: var(--mono);
+  font-size: 0.62rem; letter-spacing: 2px; cursor: pointer;
+  transition: all 0.2s;
+}
+.log-trade-btn:hover { border-color: var(--purple); color: var(--purple); }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border) 25%, rgba(26,42,58,0.8) 50%, var(--border) 75%);
+  background-size: 200% 100%; animation: shimmer 1.5s infinite;
+  border-radius: 4px; height: 13px; margin: 5px 0;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ── TRADE JOURNAL TAB ── */
+.journal-layout { display: grid; grid-template-columns: 1fr 1.6fr; gap: 18px; }
+
+@media(max-width: 900px) { .journal-layout { grid-template-columns: 1fr; } }
+
+.panel-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; overflow: hidden;
+}
+.panel-header {
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+  font-family: var(--mono); font-size: 0.65rem; color: var(--accent); letter-spacing: 3px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-body { padding: 16px 18px; }
+
+/* Trade form */
+.form-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 13px; }
+.form-label { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 2px; }
+.form-input {
+  background: rgba(0,229,255,0.03); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--mono);
+  font-size: 0.8rem; padding: 8px 11px; outline: none;
+  transition: border-color 0.2s; width: 100%;
+}
+.form-input:focus { border-color: var(--accent); }
+select.form-input option { background: #0d1520; }
+
+.form-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.result-btns { display: flex; gap: 8px; }
+.result-btn {
+  flex: 1; padding: 8px 4px; border-radius: 5px;
+  border: 1px solid var(--border); background: transparent;
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: 2px;
+  cursor: pointer; transition: all 0.2s; color: var(--muted);
+}
+.result-btn[data-r="WIN"]:hover, .result-btn[data-r="WIN"].sel { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.07); }
+.result-btn[data-r="LOSS"]:hover, .result-btn[data-r="LOSS"].sel { border-color: var(--red); color: var(--red); background: rgba(255,59,92,0.07); }
+.result-btn[data-r="BREAKEVEN"]:hover, .result-btn[data-r="BREAKEVEN"].sel { border-color: var(--yellow); color: var(--yellow); background: rgba(255,209,102,0.07); }
+
+.submit-trade-btn {
+  width: 100%; padding: 10px; margin-top: 8px;
+  background: transparent; border: 1px solid var(--purple); border-radius: 5px;
+  color: var(--purple); font-family: var(--mono); font-size: 0.75rem;
+  letter-spacing: 3px; cursor: pointer; transition: all 0.2s;
+}
+.submit-trade-btn:hover { background: var(--purple); color: var(--bg); }
+
+/* Stats cards */
+.stats-summary { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+.stat-card {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+  border-radius: 7px; padding: 12px; text-align: center;
+}
+.stat-card-val { font-family: var(--mono); font-size: 1.3rem; margin-bottom: 3px; }
+.stat-card-lbl { font-family: var(--mono); font-size: 0.56rem; color: var(--muted); letter-spacing: 2px; }
+
+/* Pattern breakdown */
+.pattern-grid { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+.pattern-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 5px;
+  background: rgba(0,0,0,0.2); font-family: var(--mono);
+}
+.pattern-name { font-size: 0.66rem; color: var(--text2); flex: 1; }
+.pattern-wr { font-size: 0.78rem; min-width: 40px; text-align: right; }
+.pattern-bar-wrap { width: 80px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.pattern-bar { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.8s ease; }
+.pattern-n { font-size: 0.6rem; color: var(--muted); min-width: 28px; text-align: right; }
+
+/* Trade list */
+.trade-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+.trade-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 6px;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  font-family: var(--mono); font-size: 0.7rem; transition: border-color 0.2s;
+}
+.trade-item:hover { border-color: var(--border2); }
+.trade-item.win { border-left: 2px solid var(--green); }
+.trade-item.loss { border-left: 2px solid var(--red); }
+.trade-item.breakeven { border-left: 2px solid var(--yellow); }
+.trade-sym { color: var(--accent); min-width: 36px; }
+.trade-dir { min-width: 42px; }
+.trade-dir.long { color: var(--green); }
+.trade-dir.short { color: var(--red); }
+.trade-meta { color: var(--muted2); flex: 1; font-size: 0.63rem; }
+.trade-rr { min-width: 42px; text-align: right; }
+.trade-rr.win { color: var(--green); }
+.trade-rr.loss { color: var(--red); }
+.trade-del {
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; font-size: 0.75rem; transition: color 0.2s; padding: 2px 4px;
+}
+.trade-del:hover { color: var(--red); }
+
+.empty-state {
+  text-align: center; padding: 40px 20px;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+  line-height: 1.8;
+}
+
+/* insight banner */
+.insight-box {
+  background: rgba(180,127,255,0.05); border: 1px solid rgba(180,127,255,0.2);
+  border-radius: 7px; padding: 12px 15px; margin-bottom: 14px;
+  font-family: var(--mono); font-size: 0.68rem; color: var(--text2); line-height: 1.7;
+}
+.insight-box .insight-title { color: var(--purple); letter-spacing: 2px; margin-bottom: 6px; font-size: 0.6rem; }
+
+/* log trade modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(4,8,16,0.8);
+  z-index: 300; opacity: 0; pointer-events: none;
+  transition: opacity 0.25s; backdrop-filter: blur(4px);
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.95);
+  background: #08111c; border: 1px solid var(--border);
+  border-radius: 10px; padding: 24px; width: 420px; max-width: 95vw;
+  z-index: 301; transition: transform 0.25s;
+}
+.modal-overlay.open .modal-box { transform: translate(-50%,-50%) scale(1); }
+.modal-title { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); letter-spacing: 3px; margin-bottom: 18px; }
+.modal-prefill { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-bottom: 14px; padding: 9px 12px; background: rgba(0,229,255,0.03); border-radius: 5px; border: 1px solid var(--border); }
+
+@media(max-width: 600px) {
+  .markets-grid { grid-template-columns: 1fr; }
+  .action-bar { flex-wrap: wrap; }
+  .stats-summary { grid-template-columns: repeat(3,1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- HEADER -->
+<header>
+  <div>
+    <div class="logo-title">◈ SIGNAL_CORE</div>
+    <div class="logo-sub">AI FUTURES ANALYSIS TERMINAL</div>
+    <div class="logo-version">▸ v2.0 — ADAPTIVE LEARNING EDITION</div>
+  </div>
+  <div class="header-right">
+    <span class="status-text">
+      <span class="status-dot" id="liveDot"></span><span id="liveText">STANDBY</span>
+    </span>
+    <span id="lastRunTime" class="status-text" style="color:rgba(0,229,255,0.25);">—</span>
+    <button class="gear-btn" id="gearBtn" onclick="openSettings()" title="設定">⚙</button>
+  </div>
+</header>
+
+<!-- TAB NAV -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('signals',this)">▶ 信號分析</button>
+  <button class="tab-btn" onclick="switchTab('journal',this)">◈ 交易日誌</button>
+</div>
+
+<!-- ═══════════════════ TAB: SIGNALS ═══════════════════ -->
+<div id="tab-signals" class="tab-panel active">
+
+  <!-- mode bar -->
+  <div class="mode-bar" id="modeBar"></div>
+
+  <!-- action bar -->
+  <div class="action-bar">
+    <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">▶ 執行 AI 分析</button>
+    <div class="auto-wrap">
+      <label class="schedule-toggle" id="autoToggle" onclick="toggleAuto()">
+        <div class="toggle-dot"></div>AUTO
+      </label>
+      <select id="scanInterval" class="interval-select">
+        <option value="1">1h</option><option value="2">2h</option>
+        <option value="4" selected>4h</option><option value="8">8h</option>
+        <option value="12">12h</option><option value="24">24h</option>
+      </select>
+      <span id="nextRunLabel" style="display:none;"></span>
+    </div>
+  </div>
+
+  <!-- log -->
+  <div class="log-panel">
+    <div class="log-title">// SYSTEM LOG</div>
+    <div class="log-entries" id="logEntries">
+      <div class="log-entry"><span class="ts">—</span>等待執行...</div>
+    </div>
+  </div>
+
+  <!-- cards -->
+  <div class="markets-grid" id="marketsGrid">
+    <!-- generated by JS -->
+  </div>
+</div>
+
+<!-- ═══════════════════ TAB: JOURNAL ═══════════════════ -->
+<div id="tab-journal" class="tab-panel">
+  <div class="journal-layout">
+
+    <!-- LEFT: add trade form -->
+    <div>
+      <div class="panel-box">
+        <div class="panel-header">
+          <span>// 新增交易記錄</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid2">
+            <div class="form-row">
+              <label class="form-label">幣種</label>
+              <select class="form-input" id="jSymbol">
+                <option>BTC</option><option>ETH</option><option>SOL</option><option>PAXG</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">方向</label>
+              <select class="form-input" id="jDir">
+                <option>LONG</option><option>SHORT</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid2">
+            <div class="form-row">
+              <label class="form-label">時間框架</label>
+              <select class="form-input" id="jTf">
+                <option>15m</option><option>1h</option><option value="4h" selected>4h</option><option>1d</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">槓桿</label>
+              <input type="number" class="form-input" id="jLeverage" placeholder="5" min="1" max="125" value="5">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">SMC 進場依據</label>
+            <select class="form-input" id="jBias">
+              <option>看多OB回測</option>
+              <option>看空OB反壓</option>
+              <option>FVG填補</option>
+              <option>流動性獵殺</option>
+              <option>結構突破BOS</option>
+              <option>CHoCH轉向</option>
+              <option>P/D Zone共振</option>
+              <option>其他</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">P/D Zone</label>
+            <select class="form-input" id="jPdZone">
+              <option value="DISCOUNT">DISCOUNT（偏便宜）</option>
+              <option value="PREMIUM">PREMIUM（偏貴）</option>
+              <option value="EQUILIBRIUM">均衡區</option>
+            </select>
+          </div>
+
+          <div class="form-grid3">
+            <div class="form-row">
+              <label class="form-label">進場價</label>
+              <input type="number" class="form-input" id="jEntry" placeholder="0">
+            </div>
+            <div class="form-row">
+              <label class="form-label">止損價</label>
+              <input type="number" class="form-input" id="jSl" placeholder="0">
+            </div>
+            <div class="form-row">
+              <label class="form-label">止盈價</label>
+              <input type="number" class="form-input" id="jTp" placeholder="0">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">RSI at Entry</label>
+            <input type="number" class="form-input" id="jRsi" placeholder="50" min="0" max="100">
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">週期共振</label>
+            <select class="form-input" id="jAlign">
+              <option value="ALIGNED">ALIGNED（共振）</option>
+              <option value="DIVERGED">DIVERGED（分歧）</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">交易結果</label>
+            <div class="result-btns">
+              <button class="result-btn" data-r="WIN" onclick="selResult(this)">✓ WIN</button>
+              <button class="result-btn" data-r="LOSS" onclick="selResult(this)">✗ LOSS</button>
+              <button class="result-btn" data-r="BREAKEVEN" onclick="selResult(this)">— B/E</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">實際 R:R（選填）</label>
+            <input type="number" class="form-input" id="jRR" placeholder="1.5" step="0.1" min="0">
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">備註</label>
+            <input type="text" class="form-input" id="jNote" placeholder="追高被套 / 在OB精準反彈...">
+          </div>
+
+          <button class="submit-trade-btn" onclick="submitTrade()">＋ 記錄此交易</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: stats + list -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- summary stats -->
+      <div class="panel-box">
+        <div class="panel-header">
+          <span>// 績效統計</span>
+          <span id="tradeCount" style="color:var(--muted);font-size:0.62rem;">0 筆記錄</span>
+        </div>
+        <div class="panel-body">
+          <div class="stats-summary">
+            <div class="stat-card">
+              <div class="stat-card-val" id="statWR" style="color:var(--green);">—</div>
+              <div class="stat-card-lbl">勝率</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-val" id="statRR" style="color:var(--accent);">—</div>
+              <div class="stat-card-lbl">平均 R:R</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-val" id="statTotal" style="color:var(--text);">0</div>
+              <div class="stat-card-lbl">總交易</div>
+            </div>
+          </div>
+
+          <!-- AI Insight -->
+          <div class="insight-box" id="aiInsight" style="display:none;">
+            <div class="insight-title">▸ BOT 個人化洞察</div>
+            <div id="insightText"></div>
+          </div>
+
+          <!-- Pattern breakdown -->
+          <div style="font-family:var(--mono);font-size:0.6rem;color:var(--accent);letter-spacing:3px;margin-bottom:8px;">// SMC 進場勝率分析</div>
+          <div class="pattern-grid" id="patternGrid">
+            <div class="empty-state">尚無足夠資料</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- trade list -->
+      <div class="panel-box">
+        <div class="panel-header">
+          <span>// 歷史記錄</span>
+          <button onclick="clearAllTrades()" style="background:transparent;border:none;color:var(--muted);font-family:var(--mono);font-size:0.6rem;cursor:pointer;letter-spacing:1px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">清除全部</button>
+        </div>
+        <div class="panel-body" style="padding-top:12px;">
+          <div class="trade-list" id="tradeList">
+            <div class="empty-state">尚無交易記錄<br><span style="color:var(--muted);font-size:0.62rem;">新增記錄後 Bot 將學習你的交易模式</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div><!-- /container -->
+
+<!-- SETTINGS OVERLAY -->
+<div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
+
+<!-- SETTINGS PANEL -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-header">
+    <div class="settings-title">// 設定 & 分析模式</div>
+    <button class="close-btn" onclick="closeSettings()">✕</button>
+  </div>
+  <div class="settings-body">
+
+    <!-- Claude API -->
+    <div class="setting-group">
+      <div class="setting-group-label">Claude API Key</div>
+      <div class="setting-hint">console.anthropic.com → 格式：sk-ant-...</div>
+      <input type="password" id="claudeKey" class="config-input" placeholder="sk-ant-api03-...">
+    </div>
+
+    <!-- Proxy URL -->
+    <div class="setting-group">
+      <div class="setting-group-label">Proxy URL（必填）</div>
+      <div class="setting-hint">Cloudflare Worker 網址，用來轉發 Claude API 請求（解決 CORS）</div>
+      <input type="text" id="proxyUrl" class="config-input" placeholder="https://signal-proxy.你的帳號.workers.dev">
+    </div>
+
+    <!-- Timeframe -->
+    <div class="setting-group">
+      <div class="setting-group-label">主要時間框架</div>
+      <select id="timeframe" class="config-input">
+        <option value="15m">15分鐘 → 搭配 1小時</option>
+        <option value="1h" selected>1小時 → 搭配 4小時</option>
+        <option value="4h">4小時 → 搭配 日線</option>
+        <option value="1d">日線</option>
+      </select>
+    </div>
+
+    <!-- ── ANALYSIS MODE ── -->
+    <div class="setting-group">
+      <div class="setting-group-label">分析風格</div>
+      <div class="chip-group" id="chipStyle">
+        <button class="chip active" data-val="HYBRID" onclick="selectChip('chipStyle',this)">SMC + 指標混合</button>
+        <button class="chip" data-val="SMC_ONLY" onclick="selectChip('chipStyle',this)">純 SMC 優先</button>
+        <button class="chip" data-val="INDICATOR_ONLY" onclick="selectChip('chipStyle',this)">純技術指標</button>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-group-label">交易類型</div>
+      <div class="chip-group" id="chipTrade">
+        <button class="chip" data-val="SCALP" onclick="selectChip('chipTrade',this)">短線 Scalp</button>
+        <button class="chip active" data-val="SWING" onclick="selectChip('chipTrade',this)">波段 Swing</button>
+        <button class="chip" data-val="TREND" onclick="selectChip('chipTrade',this)">趨勢跟隨</button>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-group-label">風險偏好</div>
+      <div class="chip-group" id="chipRisk">
+        <button class="chip active-green active" data-val="CONSERVATIVE" onclick="selectChip('chipRisk',this,'active-green')">保守 Conservative</button>
+        <button class="chip" data-val="MODERATE" onclick="selectChip('chipRisk',this,'active-yellow')">中性 Moderate</button>
+        <button class="chip" data-val="AGGRESSIVE" onclick="selectChip('chipRisk',this,'active-red')">積極 Aggressive</button>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-group-label">最低信心門檻（%）</div>
+      <div class="slider-wrap">
+        <input type="range" id="minConf" min="50" max="90" value="70" step="5"
+          oninput="document.getElementById('minConfVal').textContent=this.value+'%'">
+        <span class="slider-val" id="minConfVal">70%</span>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-group-label">最大槓桿上限</div>
+      <div class="slider-wrap">
+        <input type="range" id="maxLev" min="1" max="50" value="10" step="1"
+          oninput="document.getElementById('maxLevVal').textContent=this.value+'x'">
+        <span class="slider-val" id="maxLevVal">10x</span>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-group-label">個人化學習</div>
+      <div class="chip-group" id="chipLearn">
+        <button class="chip active" data-val="ON" onclick="selectChip('chipLearn',this)">開啟（注入歷史統計）</button>
+        <button class="chip" data-val="OFF" onclick="selectChip('chipLearn',this)">關閉</button>
+      </div>
+      <div class="setting-hint">開啟後，Bot 會根據你的歷史交易記錄調整分析邏輯</div>
+    </div>
+
+    <!-- EmailJS -->
+    <div class="setting-group">
+      <div class="setting-group-label">EmailJS — Service ID</div>
+      <input type="text" id="emailjsServiceId" class="config-input" placeholder="service_xxxxxxx">
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-label">EmailJS — Template ID</div>
+      <input type="text" id="emailjsTemplateId" class="config-input" placeholder="template_xxxxxxx">
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-label">EmailJS — Public Key</div>
+      <input type="text" id="emailjsPublicKey" class="config-input" placeholder="aBcDeFgH...">
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-label">收件信箱</div>
+      <input type="email" id="targetEmail" class="config-input" placeholder="your@email.com">
+    </div>
+
+    <button class="save-btn" onclick="saveSettings()">✓ 儲存設定</button>
+    <div class="settings-saved-badge" id="savedBadge">SAVED ✓</div>
+  </div>
+</div>
+
+<!-- LOG TRADE MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">// 快速記錄此信號</div>
+    <div class="modal-prefill" id="modalPrefill"></div>
+    <div class="form-row">
+      <label class="form-label">交易結果</label>
+      <div class="result-btns">
+        <button class="result-btn" data-r="WIN" onclick="selModalResult(this)">✓ WIN</button>
+        <button class="result-btn" data-r="LOSS" onclick="selModalResult(this)">✗ LOSS</button>
+        <button class="result-btn" data-r="BREAKEVEN" onclick="selModalResult(this)">— B/E</button>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:12px;">
+      <label class="form-label">實際 R:R</label>
+      <input type="number" class="form-input" id="modalRR" placeholder="1.5" step="0.1">
+    </div>
+    <div class="form-row">
+      <label class="form-label">備註</label>
+      <input type="text" class="form-input" id="modalNote" placeholder="備註...">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button onclick="closeModal()" style="flex:1;padding:9px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--muted);font-family:var(--mono);font-size:0.72rem;cursor:pointer;">取消</button>
+      <button onclick="submitModalTrade()" style="flex:2;padding:9px;background:transparent;border:1px solid var(--purple);border-radius:5px;color:var(--purple);font-family:var(--mono);font-size:0.72rem;cursor:pointer;letter-spacing:2px;">記錄</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let autoInterval = null, isAutoOn = false;
+let analysisResults = {};
+let selectedResult = null, selectedModalResult = null;
+let modalPendingTrade = null;
+
+const SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','PAXGUSDT'];
+const SYM_LABELS = { BTCUSDT:'₿ BTCUSDT', ETHUSDT:'◈ ETHUSDT', SOLUSDT:'◆ SOLUSDT', PAXGUSDT:'⬡ PAXGUSDT' };
+
+// ═══════════════════════════════════════════════════════
+// TAB
+// ═══════════════════════════════════════════════════════
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'journal') renderJournal();
+}
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════
+function getSettings() {
+  try { return JSON.parse(localStorage.getItem('sc_v2_settings') || '{}'); } catch { return {}; }
+}
+
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+  document.getElementById('settingsPanel').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+  document.getElementById('settingsPanel').classList.remove('open');
+}
+
+function selectChip(groupId, btn, activeClass='active') {
+  document.querySelectorAll(`#${groupId} .chip`).forEach(c => {
+    c.classList.remove('active','active-green','active-red','active-yellow');
+  });
+  btn.classList.add(activeClass);
+}
+
+function saveSettings() {
+  const s = {
+    claudeKey: document.getElementById('claudeKey').value.replace(/[^\x20-\x7E]/g, '').trim(),
+    proxyUrl: document.getElementById('proxyUrl').value.trim(),
+    serviceId: document.getElementById('emailjsServiceId').value,
+    templateId: document.getElementById('emailjsTemplateId').value,
+    publicKey: document.getElementById('emailjsPublicKey').value,
+    email: document.getElementById('targetEmail').value,
+    timeframe: document.getElementById('timeframe').value,
+    interval: document.getElementById('scanInterval').value,
+    analysisStyle: document.querySelector('#chipStyle .active')?.dataset.val || 'HYBRID',
+    tradeType: document.querySelector('#chipTrade .active')?.dataset.val || 'SWING',
+    riskLevel: document.querySelector('#chipRisk .active')?.dataset.val || 'CONSERVATIVE',
+    minConf: document.getElementById('minConf').value,
+    maxLev: document.getElementById('maxLev').value,
+    learnMode: document.querySelector('#chipLearn .active')?.dataset.val || 'ON',
+  };
+  localStorage.setItem('sc_v2_settings', JSON.stringify(s));
+  document.getElementById('savedBadge').classList.add('show');
+  setTimeout(() => document.getElementById('savedBadge').classList.remove('show'), 2000);
+  checkConfigured(); renderModeBadges(); log('設定已儲存','ok');
+}
+
+function loadSettings() {
+  const s = getSettings();
+  if (s.claudeKey) document.getElementById('claudeKey').value = s.claudeKey;
+  if (s.proxyUrl) document.getElementById('proxyUrl').value = s.proxyUrl;
+  if (s.serviceId) document.getElementById('emailjsServiceId').value = s.serviceId;
+  if (s.templateId) document.getElementById('emailjsTemplateId').value = s.templateId;
+  if (s.publicKey) document.getElementById('emailjsPublicKey').value = s.publicKey;
+  if (s.email) document.getElementById('targetEmail').value = s.email;
+  if (s.timeframe) document.getElementById('timeframe').value = s.timeframe;
+  if (s.interval) document.getElementById('scanInterval').value = s.interval;
+  if (s.minConf) { document.getElementById('minConf').value = s.minConf; document.getElementById('minConfVal').textContent = s.minConf+'%'; }
+  if (s.maxLev) { document.getElementById('maxLev').value = s.maxLev; document.getElementById('maxLevVal').textContent = s.maxLev+'x'; }
+
+  if (s.analysisStyle) {
+    document.querySelectorAll('#chipStyle .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.val === s.analysisStyle);
+    });
+  }
+  if (s.tradeType) {
+    document.querySelectorAll('#chipTrade .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.val === s.tradeType);
+    });
+  }
+  if (s.riskLevel) {
+    document.querySelectorAll('#chipRisk .chip').forEach(c => {
+      c.classList.remove('active','active-green','active-red','active-yellow');
+    });
+    const riskMap = {CONSERVATIVE:'active-green', MODERATE:'active-yellow', AGGRESSIVE:'active-red'};
+    const target = document.querySelector(`#chipRisk [data-val="${s.riskLevel}"]`);
+    if (target) target.classList.add(riskMap[s.riskLevel]||'active');
+  }
+  if (s.learnMode) {
+    document.querySelectorAll('#chipLearn .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.val === s.learnMode);
+    });
+  }
+  checkConfigured(); renderModeBadges();
+  if (s.claudeKey) log('已載入設定','ok');
+}
+
+function checkConfigured() {
+  const s = getSettings();
+  document.getElementById('gearBtn').classList.toggle('unconfigured', !s.claudeKey);
+}
+
+function renderModeBadges() {
+  const s = getSettings();
+  const bar = document.getElementById('modeBar');
+  const styleMap = {HYBRID:'SMC+指標', SMC_ONLY:'純SMC', INDICATOR_ONLY:'純指標'};
+  const tradeMap = {SCALP:'短線', SWING:'波段', TREND:'趨勢'};
+  const riskMap = {CONSERVATIVE:'保守', MODERATE:'中性', AGGRESSIVE:'積極'};
+  const riskColor = {CONSERVATIVE:'var(--green)', MODERATE:'var(--yellow)', AGGRESSIVE:'var(--red)'};
+  const risk = s.riskLevel || 'CONSERVATIVE';
+
+  bar.innerHTML = `
+    <span class="mode-tag" style="color:var(--accent);border-color:var(--accent2);">${styleMap[s.analysisStyle||'HYBRID']}</span>
+    <span class="mode-tag" style="color:var(--purple);border-color:rgba(180,127,255,0.3);">${tradeMap[s.tradeType||'SWING']}</span>
+    <span class="mode-tag" style="color:${riskColor[risk]};border-color:${riskColor[risk]}40;">${riskMap[risk]}</span>
+    <span class="mode-tag" style="color:var(--muted2);border-color:var(--border);">門檻 ${s.minConf||70}%</span>
+    <span class="mode-tag" style="color:var(--muted2);border-color:var(--border);">槓桿 ≤${s.maxLev||10}x</span>
+    ${(s.learnMode||'ON')==='ON' ? '<span class="mode-tag" style="color:var(--purple);border-color:rgba(180,127,255,0.3);">🧠 學習開啟</span>' : ''}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// LOGGER
+// ═══════════════════════════════════════════════════════
+function log(msg, type='') {
+  const c = document.getElementById('logEntries');
+  const ts = new Date().toTimeString().slice(0,8);
+  const d = document.createElement('div');
+  d.className='log-entry';
+  d.innerHTML=`<span class="ts">${ts}</span><span class="${type}">${msg}</span>`;
+  c.prepend(d);
+  if(c.children.length>30) c.lastChild.remove();
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT CARDS
+// ═══════════════════════════════════════════════════════
+function initCards() {
+  const grid = document.getElementById('marketsGrid');
+  grid.innerHTML = SYMBOLS.map(sym => {
+    const short = sym.replace('USDT','');
+    return `
+    <div class="market-card" id="card-${short}">
+      <div class="market-header">
+        <span class="market-symbol">${SYM_LABELS[sym]}</span>
+        <span class="signal-badge loading" id="badge-${short}">—</span>
+        <span class="market-price" id="price-${short}">—</span>
+      </div>
+      <div class="market-body" id="body-${short}">
+        <div class="skeleton"></div><div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:85%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// BINANCE
+// ═══════════════════════════════════════════════════════
+// Binance 有多個域名，台灣/某些地區可能需要備用
+const BINANCE_HOSTS = [
+  'https://api.binance.com',
+  'https://api1.binance.com',
+  'https://api2.binance.com',
+  'https://api3.binance.com',
+];
+
+async function binanceFetch(path) {
+  let lastErr;
+  for (const host of BINANCE_HOSTS) {
+    try {
+      const res = await fetch(host + path, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) { lastErr = 'HTTP ' + res.status; continue; }
+      return await res.json();
+    } catch(e) {
+      lastErr = e.message;
+    }
+  }
+  throw new Error('Binance API 全部失敗：' + lastErr + '（可能是地區限制，請確認網路或使用 VPN）');
+}
+
+async function fetchBinanceKlines(symbol, interval, limit=300) {
+  const data = await binanceFetch(`/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+  return data.map(k=>({t:new Date(k[0]).toISOString(),o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+}
+async function fetchCurrentPrice(symbol) {
+  const data = await binanceFetch(`/api/v3/ticker/price?symbol=${symbol}`);
+  return parseFloat(data.price);
+}
+
+// ═══════════════════════════════════════════════════════
+// INDICATORS
+// ═══════════════════════════════════════════════════════
+function calcSMA(c,p){return c.map((_,i)=>i<p-1?null:+(c.slice(i-p+1,i+1).reduce((a,b)=>a+b,0)/p).toFixed(4));}
+function calcEMA(c,p){const k=2/(p+1);const r=[];c.forEach((v,i)=>r.push(i===0?v:+(v*k+r[i-1]*(1-k)).toFixed(4)));return r;}
+function calcRSI(c,p=14){return c.map((_,i)=>{if(i<p)return null;let g=0,l=0;for(let j=i-p+1;j<=i;j++){const d=c[j]-c[j-1];d>0?g+=d:l+=Math.abs(d);}return +(100-100/(1+g/(l||0.0001))).toFixed(2);});}
+function calcMACD(c){const e12=calcEMA(c,12),e26=calcEMA(c,26);const macd=e12.map((v,i)=>v&&e26[i]?+(v-e26[i]).toFixed(6):null);const sig=calcEMA(macd.filter(v=>v!==null),9);const hist=macd.slice(-sig.length).map((v,i)=>v!==null?+(v-sig[i]).toFixed(6):null);return{macd:macd[macd.length-1],signal:sig[sig.length-1],histogram:hist[hist.length-1]};}
+function calcBB(c,p=20){const last=c.slice(-p),mean=last.reduce((a,b)=>a+b,0)/p;const std=Math.sqrt(last.reduce((acc,v)=>acc+Math.pow(v-mean,2),0)/p);return{upper:+(mean+2*std).toFixed(2),middle:+mean.toFixed(2),lower:+(mean-2*std).toFixed(2)};}
+function calcATR(k,p=14){const trs=k.slice(1).map((c,i)=>Math.max(c.h-c.l,Math.abs(c.h-k[i].c),Math.abs(c.l-k[i].c)));return+(trs.slice(-p).reduce((a,b)=>a+b,0)/p).toFixed(4);}
+
+// ═══════════════════════════════════════════════════════
+// SMC
+// ═══════════════════════════════════════════════════════
+function findSwings(klines,lb=5){const highs=[],lows=[];for(let i=lb;i<klines.length-lb;i++){if(klines.slice(i-lb,i).every(k=>k.h<=klines[i].h)&&klines.slice(i+1,i+lb+1).every(k=>k.h<=klines[i].h))highs.push({i,price:klines[i].h});if(klines.slice(i-lb,i).every(k=>k.l>=klines[i].l)&&klines.slice(i+1,i+lb+1).every(k=>k.l>=klines[i].l))lows.push({i,price:klines[i].l});}return{highs,lows};}
+function detectStructure(klines,swings){const{highs,lows}=swings;const price=klines.at(-1).c;let bias='NEUTRAL',lastBOS=null,lastCHoCH=null;const rh=highs.slice(-4),rl=lows.slice(-4);for(let i=1;i<rh.length;i++)if(rh[i].price>rh[i-1].price){bias='BULLISH';lastBOS={type:'BOS向上',level:+rh[i].price.toFixed(2),barsAgo:klines.length-rh[i].i-1};}for(let i=1;i<rl.length;i++)if(rl[i].price<rl[i-1].price){bias='BEARISH';lastBOS={type:'BOS向下',level:+rl[i].price.toFixed(2),barsAgo:klines.length-rl[i].i-1};}if(bias==='BULLISH'&&rl.length){const last=rl.at(-1);if(price<last.price)lastCHoCH={type:'CHoCH看空',level:+last.price.toFixed(2)};}if(bias==='BEARISH'&&rh.length){const last=rh.at(-1);if(price>last.price)lastCHoCH={type:'CHoCH看多',level:+last.price.toFixed(2)};}return{bias,lastBOS,lastCHoCH};}
+function findOrderBlocks(klines,max=3){const price=klines.at(-1).c;const bull=[],bear=[];for(let i=5;i<klines.length-3;i++){const c=klines[i];if(c.c<c.o){const imp=klines.slice(i+1,i+4);if(imp.every(k=>k.c>k.o)&&imp.at(-1).h>c.h*1.002&&c.l<price)bull.push({top:+c.h.toFixed(2),bottom:+c.l.toFixed(2),barsAgo:klines.length-i-1});}if(c.c>c.o){const imp=klines.slice(i+1,i+4);if(imp.every(k=>k.c<k.o)&&imp.at(-1).l<c.l*0.998&&c.h>price)bear.push({top:+c.h.toFixed(2),bottom:+c.l.toFixed(2),barsAgo:klines.length-i-1});}}const f=obs=>obs.slice(-max);return{bullish:f(bull),bearish:f(bear)};}
+function findFVGs(klines,max=3){const price=klines.at(-1).c;const bull=[],bear=[];for(let i=1;i<klines.length-1;i++){const p=klines[i-1],n=klines[i+1];if(n.l>p.h&&price>p.h)bull.push({top:+n.l.toFixed(2),bottom:+p.h.toFixed(2),barsAgo:klines.length-i-1});if(n.h<p.l&&price<p.l)bear.push({top:+p.l.toFixed(2),bottom:+n.h.toFixed(2),barsAgo:klines.length-i-1});}return{bullish:bull.slice(-max),bearish:bear.slice(-max)};}
+function calcPDZone(klines,swings){const{highs,lows}=swings;if(!highs.length||!lows.length)return null;const hi=highs.at(-1).price,lo=lows.at(-1).price;const eq=+((hi+lo)/2).toFixed(2);const price=klines.at(-1).c;return{swingHigh:+hi.toFixed(2),swingLow:+lo.toFixed(2),equilibrium:eq,zone:price>eq?'PREMIUM':'DISCOUNT'};}
+function findLiquidity(swings){const{highs,lows}=swings;const tol=0.002;const bsl=new Set(),ssl=new Set();for(let i=0;i<highs.length-1;i++)for(let j=i+1;j<highs.length;j++)if(Math.abs(highs[i].price-highs[j].price)/highs[i].price<tol)bsl.add(+((highs[i].price+highs[j].price)/2).toFixed(2));for(let i=0;i<lows.length-1;i++)for(let j=i+1;j<lows.length;j++)if(Math.abs(lows[i].price-lows[j].price)/lows[i].price<tol)ssl.add(+((lows[i].price+lows[j].price)/2).toFixed(2));return{BSL:[...bsl].slice(-2),SSL:[...ssl].slice(-2)};}
+
+function calcSMC(klines){const swings=findSwings(klines,5);return{structure:detectStructure(klines,swings),obs:findOrderBlocks(klines,3),fvgs:findFVGs(klines,3),pdZone:calcPDZone(klines,swings),liq:findLiquidity(swings)};}
+
+function fmtSMC(smc){const{structure,obs,fvgs,pdZone,liq}=smc;const lines=[];lines.push(`市場結構偏向: ${structure.bias}`);if(structure.lastBOS)lines.push(`最後BOS: ${structure.lastBOS.type} @ $${structure.lastBOS.level}（${structure.lastBOS.barsAgo}根前）`);if(structure.lastCHoCH)lines.push(`CHoCH: ${structure.lastCHoCH.type} @ $${structure.lastCHoCH.level}`);if(obs.bullish.length)lines.push(`多方OB: ${obs.bullish.map(o=>`$${o.bottom}-$${o.top}（${o.barsAgo}根前）`).join(', ')}`);if(obs.bearish.length)lines.push(`空方OB: ${obs.bearish.map(o=>`$${o.bottom}-$${o.top}（${o.barsAgo}根前）`).join(', ')}`);if(fvgs.bullish.length)lines.push(`看多FVG: ${fvgs.bullish.map(f=>`$${f.bottom}-$${f.top}（${f.barsAgo}根前）`).join(', ')}`);if(fvgs.bearish.length)lines.push(`看空FVG: ${fvgs.bearish.map(f=>`$${f.bottom}-$${f.top}（${f.barsAgo}根前）`).join(', ')}`);if(pdZone)lines.push(`P/D Zone: EQ=$${pdZone.equilibrium} | 現價${pdZone.zone}`);if(liq.BSL.length)lines.push(`BSL: $${liq.BSL.join(', $')}`);if(liq.SSL.length)lines.push(`SSL: $${liq.SSL.join(', $')}`);return lines.join('\n');}
+
+function buildSummary(klines,tf){const c=klines.map(k=>k.c);const rsi=calcRSI(c,14);const macd=calcMACD(c);const bb=calcBB(c,20);const smc=calcSMC(klines);return{timeframe:tf,indicators:{RSI14:rsi[rsi.length-1],SMA20:calcSMA(c,20).at(-1),EMA50:calcEMA(c,50).at(-1),EMA200:calcEMA(c,200).at(-1),MACD:macd,BollingerBands:bb,ATR14:calcATR(klines,14),VolumeRatio:+(klines.at(-1).v/(klines.slice(-10).reduce((a,k)=>a+k.v,0)/10)).toFixed(2)},recentCandles:klines.slice(-5).map(k=>({t:k.t,o:k.o,h:k.h,l:k.l,c:k.c})),smc};}
+
+// ═══════════════════════════════════════════════════════
+// TRADE JOURNAL DATA
+// ═══════════════════════════════════════════════════════
+function getTrades(){try{return JSON.parse(localStorage.getItem('sc_v2_trades')||'[]');}catch{return[];}}
+function saveTrades(trades){localStorage.setItem('sc_v2_trades',JSON.stringify(trades));}
+
+function calcTradeStats(trades) {
+  if (!trades.length) return null;
+  const finished = trades.filter(t => t.result !== 'PENDING');
+  if (!finished.length) return null;
+  const wins = finished.filter(t => t.result === 'WIN').length;
+  const rrs = finished.filter(t => t.rr > 0).map(t => t.rr);
+  const avgRR = rrs.length ? (rrs.reduce((a,b)=>a+b,0)/rrs.length).toFixed(2) : '—';
+  const wr = ((wins/finished.length)*100).toFixed(0);
+
+  // Pattern breakdown by smcBias
+  const biasMap = {};
+  finished.forEach(t => {
+    if (!biasMap[t.bias]) biasMap[t.bias] = {w:0,l:0};
+    if (t.result==='WIN') biasMap[t.bias].w++;
+    else if (t.result==='LOSS') biasMap[t.bias].l++;
+  });
+
+  // Extra insights
+  const insights = [];
+  const discountTrades = finished.filter(t=>t.pdZone==='DISCOUNT'&&t.dir==='LONG');
+  const premiumLong = finished.filter(t=>t.pdZone==='PREMIUM'&&t.dir==='LONG');
+  const divergedTrades = finished.filter(t=>t.align==='DIVERGED');
+  const rsiLowLong = finished.filter(t=>t.rsi&&t.rsi<35&&t.dir==='LONG');
+
+  if (discountTrades.length>=3) {
+    const dw=discountTrades.filter(t=>t.result==='WIN').length;
+    const pct=((dw/discountTrades.length)*100).toFixed(0);
+    insights.push(`在 DISCOUNT 做多：${pct}% 勝率（${discountTrades.length}筆）${+pct>60?' ✓ 優勢明顯':' ⚠ 尚待改善'}`);
+  }
+  if (premiumLong.length>=3) {
+    const pw=premiumLong.filter(t=>t.result==='WIN').length;
+    const pct=((pw/premiumLong.length)*100).toFixed(0);
+    if (+pct<40) insights.push(`⚠ 在 PREMIUM 做多 勝率僅 ${pct}%，建議避免追高`);
+  }
+  if (divergedTrades.length>=3) {
+    const dw=divergedTrades.filter(t=>t.result==='WIN').length;
+    const pct=((dw/divergedTrades.length)*100).toFixed(0);
+    if (+pct<45) insights.push(`⚠ 週期分歧(DIVERGED) 時入場 勝率 ${pct}%，建議等共振`);
+  }
+  if (rsiLowLong.length>=2) {
+    const lw=rsiLowLong.filter(t=>t.result==='WIN').length;
+    const pct=((lw/rsiLowLong.length)*100).toFixed(0);
+    insights.push(`RSI<35 時做多：${pct}% 勝率（${rsiLowLong.length}筆）`);
+  }
+
+  return { wr, avgRR, total: finished.length, biasMap, insights };
+}
+
+function buildLearnPrompt(trades) {
+  const stats = calcTradeStats(trades);
+  if (!stats || stats.total < 3) return '';
+  const lines = [
+    `\n━━━ 你的歷史交易統計（Bot 個人化學習）━━━`,
+    `總記錄：${stats.total}筆 | 勝率：${stats.wr}% | 平均R:R：${stats.avgRR}`
+  ];
+  Object.entries(stats.biasMap).forEach(([bias, {w, l}]) => {
+    const total = w+l;
+    if (total >= 2) {
+      const pct = ((w/total)*100).toFixed(0);
+      lines.push(`進場依據「${bias}」：${pct}% 勝率（${total}筆）`);
+    }
+  });
+  if (stats.insights.length) {
+    lines.push('個人化建議：');
+    stats.insights.forEach(i => lines.push('· ' + i));
+  }
+  lines.push('請根據以上統計，調整本次信號的信心分數和建議，並在 summary 中加入個人化提示。');
+  return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════
+// CLAUDE ANALYSIS
+// ═══════════════════════════════════════════════════════
+async function analyzeWithClaude(symbol, price, tf1Klines, tf2Klines, tf1, tf2) {
+  const s = getSettings();
+  // Read directly from DOM input (most reliable - same as original)
+  const key = (document.getElementById('claudeKey').value || s.claudeKey || '').replace(/[^\x20-\x7E]/g, '').trim();
+  if (!key) throw new Error('請先在設定中填入 Claude API Key');
+  if (!key.startsWith('sk-')) throw new Error('API Key 格式錯誤，應以 sk- 開頭');
+
+  const sum1 = buildSummary(tf1Klines, tf1);
+  const sum2 = buildSummary(tf2Klines, tf2);
+
+  // SMC text
+  const smc1 = fmtSMC(sum1.smc);
+  const smc2 = fmtSMC(sum2.smc);
+  const ind1 = sum1.indicators;
+  const ind2 = sum2.indicators;
+  const tf1name = {BTCUSDT:'4h',ETHUSDT:'4h',SOLUSDT:'4h',PAXGUSDT:'4h'}; // simplified
+
+  const tf1Text = `RSI=${ind1.RSI14} | EMA50=${ind1.EMA50} | EMA200=${ind1.EMA200}\nMACD=${ind1.MACD.macd} Hist=${ind1.MACD.histogram}\nBB 上=${ind1.BollingerBands.upper} 下=${ind1.BollingerBands.lower}\nATR=${ind1.ATR14} | 量比=${ind1.VolumeRatio}x\n\n${smc1}`;
+  const tf2Text = `RSI=${ind2.RSI14} | EMA50=${ind2.EMA50} | EMA200=${ind2.EMA200}\nMACD=${ind2.MACD.macd} Hist=${ind2.MACD.histogram}\nBB 上=${ind2.BollingerBands.upper} 下=${ind2.BollingerBands.lower}\nATR=${ind2.ATR14} | 量比=${ind2.VolumeRatio}x\n\n${smc2}`;
+
+  // Mode-specific prompt injection
+  const style = s.analysisStyle || 'HYBRID';
+  const tradeType = s.tradeType || 'SWING';
+  const risk = s.riskLevel || 'CONSERVATIVE';
+  const maxLev = s.maxLev || 10;
+
+  const stylePrompt = {
+    HYBRID: 'SMC結構與傳統指標並重，優先看兩者共振。',
+    SMC_ONLY: '只依據 SMC 結構分析（OB/FVG/BOS/CHoCH/PD Zone），忽略傳統指標，除非技術指標出現極端數值。',
+    INDICATOR_ONLY: '主要依據 RSI/MACD/BB/EMA 等傳統指標，SMC僅輔助參考。'
+  }[style];
+
+  const tradePrompt = {
+    SCALP: '策略傾向短線Scalp，止損緊、快進快出，TP設在最近阻力。',
+    SWING: '策略傾向波段交易，允許較大回撤，TP設遠一點，追求較高R:R。',
+    TREND: '策略傾向趨勢跟隨，只做順趨勢方向，逆勢信號直接給NEUTRAL。'
+  }[tradeType];
+
+  const riskPrompt = {
+    CONSERVATIVE: `保守風格：信心需達75%以上才給LONG/SHORT，槓桿上限${maxLev}x，優先資金安全。`,
+    MODERATE: `中性風格：信心達65%可給信號，槓桿上限${maxLev}x，平衡風報比。`,
+    AGGRESSIVE: `積極風格：信心60%即可給信號，槓桿可建議至${maxLev}x，追求高報酬。`
+  }[risk];
+
+  const goldNote = symbol==='PAXGUSDT' ? '（黃金代幣，與實物黃金高度相關，受避險情緒與美元指數影響）' : '';
+
+  // Learn prompt
+  const learnMode = s.learnMode || 'ON';
+  const trades = getTrades();
+  const learnPrompt = learnMode==='ON' && trades.length>=3 ? buildLearnPrompt(trades) : '';
+
+  const prompt = `你是一位專業的加密貨幣合約交易分析師，精通 SMC 與多時間框架共振分析。
+
+幣種：${symbol}${goldNote}｜當前價格：$${price}
+
+━━━ 短週期（入場時機）━━━
+${tf1Text}
+
+━━━ 長週期（趨勢方向）━━━
+${tf2Text}
+
+━━━ 用戶分析偏好 ━━━
+分析風格：${stylePrompt}
+交易策略：${tradePrompt}
+風險設定：${riskPrompt}
+${learnPrompt}
+
+━━━ SMC 分析框架 ━━━
+1. 長週期結構偏向決定方向
+2. Discount 區多方OB/看多FVG做多；Premium 區空方OB/看空FVG做空
+3. 止損放 OB 外側，TP1 瞄準流動性，TP2 對向OB
+4. 兩週期 SMC 共振才給高信心，分歧給 NEUTRAL
+5. 根據用戶風險偏好調整信心門檻
+
+只回傳 JSON，不要任何其他文字：
+{"signal":"LONG|SHORT|NEUTRAL","confidence":0-100,"entry":數字,"stopLoss":數字,"takeProfit1":數字,"takeProfit2":數字,"leverage":1-${maxLev},"tfAlignment":"ALIGNED|DIVERGED","smcBias":"看多OB回測|看空OB反壓|FVG填補|流動性獵殺|結構突破|CHoCH轉向|觀望","pdZone":"PREMIUM|DISCOUNT|EQUILIBRIUM","summary":"80字內中文摘要","risk":"LOW|MEDIUM|HIGH"}`;
+
+  // Route through Cloudflare Worker proxy (avoids CORS)
+  // Deploy your own: https://github.com/JS-199010/signal-core (see README)
+  const PROXY_URL = (s.proxyUrl || '').trim();
+  if (!PROXY_URL) throw new Error('請先在設定中填入 Proxy URL（Cloudflare Worker）');
+
+  let res;
+  try {
+    res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: key,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal: AbortSignal.timeout(45000)
+    });
+  } catch (fetchErr) {
+    if (fetchErr.name === 'TimeoutError') throw new Error('請求逾時（45s）');
+    throw new Error('Proxy 連線失敗：' + fetchErr.message + '\n請確認已設定 Cloudflare Worker proxy URL');
+  }
+  if (!res.ok) {
+    let errBody = '';
+    try { const e = await res.json(); errBody = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error('API Error ' + res.status + (errBody ? ': ' + errBody : ''));
+  }
+  const data = await res.json();
+  let text = data.content[0].text.trim().replace(/```json|```/g,'').trim();
+  return JSON.parse(text);
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMEFRAME MAP
+// ═══════════════════════════════════════════════════════
+function getTFs() {
+  const s = getSettings();
+  const map = {'15m':['15m','1h'],'1h':['1h','4h'],'4h':['4h','1d'],'1d':['1d','1d']};
+  return map[s.timeframe||'1h'] || ['1h','4h'];
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER CARD
+// ═══════════════════════════════════════════════════════
+function renderCard(sym, price, a) {
+  const short = sym.replace('USDT','');
+  const sig = a.signal.toLowerCase();
+  const card = document.getElementById('card-'+short);
+  card.className = 'market-card ' + (sig==='long'?'long':sig==='short'?'short':'');
+
+  const badge = document.getElementById('badge-'+short);
+  badge.className = 'signal-badge '+sig;
+  badge.textContent = sig==='long'?'▲ LONG':sig==='short'?'▼ SHORT':'◆ NEUTRAL';
+
+  document.getElementById('price-'+short).textContent = '$'+price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const conf = a.confidence;
+  const risk = a.risk || 'MEDIUM';
+  const riskColor = {LOW:'var(--green)',MEDIUM:'var(--yellow)',HIGH:'var(--red)'}[risk];
+  const fmt = n => n > 100 ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : n.toFixed(4);
+
+  document.getElementById('body-'+short).innerHTML = `
+    <div class="stats-row">
+      <div class="stat-item"><span class="stat-label">CONFIDENCE</span><span class="stat-value ${conf>=70?'up':'down'}">${conf}%</span></div>
+      <div class="stat-item"><span class="stat-label">LEVERAGE</span><span class="stat-value">${a.leverage}x</span></div>
+      <div class="stat-item"><span class="stat-label">RISK</span><span class="stat-value" style="color:${riskColor}">${risk}</span></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-item"><span class="stat-label">ALIGNMENT</span><span class="stat-value" style="color:${a.tfAlignment==='ALIGNED'?'var(--green)':'var(--yellow)'}; font-size:0.72rem;">${a.tfAlignment}</span></div>
+      <div class="stat-item" style="grid-column:span 2;"><span class="stat-label">SMC BIAS</span><span class="stat-value" style="font-size:0.7rem;color:var(--purple);">${a.smcBias||'—'}</span></div>
+    </div>
+    <div class="trade-levels">
+      <div class="level-row entry"><span class="level-name">ENTRY</span><span class="level-value">$${fmt(a.entry)}</span></div>
+      <div class="level-row sl"><span class="level-name">STOP LOSS</span><span class="level-value" style="color:var(--red);">$${fmt(a.stopLoss)}</span></div>
+      <div class="level-row tp"><span class="level-name">TP 1</span><span class="level-value" style="color:var(--green);">$${fmt(a.takeProfit1)}</span></div>
+      <div class="level-row tp"><span class="level-name">TP 2</span><span class="level-value" style="color:var(--green);">$${fmt(a.takeProfit2)}</span></div>
+    </div>
+    <div class="confidence-bar-wrap">
+      <div class="confidence-label"><span>SIGNAL STRENGTH</span><span>${conf}%</span></div>
+      <div class="confidence-track"><div class="confidence-fill ${sig}" style="width:${conf}%"></div></div>
+    </div>
+    <div class="analysis-text">${a.summary}</div>
+    <button class="log-trade-btn" onclick="openLogModal('${sym}', ${price}, ${JSON.stringify(a).replace(/'/g,"\\'")})" style="margin-top:10px;">
+      ◈ 記錄此交易到日誌
+    </button>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN ANALYSIS
+// ═══════════════════════════════════════════════════════
+async function runAnalysis() {
+  const s = getSettings();
+  const _keyCheck = document.getElementById('claudeKey').value.trim();
+  if (!_keyCheck) { log('請先設定 Claude API Key','err'); openSettings(); return; }
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true; btn.textContent = '◌ 分析中...';
+  document.getElementById('liveDot').classList.add('live');
+  document.getElementById('liveText').textContent = 'SCANNING';
+
+  const [tf1, tf2] = getTFs();
+  const minConf = parseInt(s.minConf||70);
+  let hasStrong = false;
+
+  for (const sym of SYMBOLS) {
+    const short = sym.replace('USDT','');
+    log(`[${short}] 抓取 K線...`, 'info');
+    try {
+      const [klines1, klines2, price] = await Promise.all([
+        fetchBinanceKlines(sym, tf1), fetchBinanceKlines(sym, tf2), fetchCurrentPrice(sym)
+      ]);
+      log(`[${short}] 呼叫 Claude...`, 'info');
+      const a = await analyzeWithClaude(sym, price, klines1, klines2, tf1, tf2);
+      analysisResults[sym] = { price, analysis: a };
+      renderCard(sym, price, a);
+      if (a.confidence >= minConf && a.signal !== 'NEUTRAL') hasStrong = true;
+      log(`[${short}] → ${a.signal} (${a.confidence}%) | ${a.tfAlignment} | ${a.smcBias}`, a.confidence>=minConf&&a.signal!=='NEUTRAL'?'ok':'warn');
+    } catch(e) {
+      log(`[${short}] 錯誤: ${e.message}`, 'err');
+    }
+  }
+
+  document.getElementById('liveDot').classList.remove('live');
+  document.getElementById('liveText').textContent = 'STANDBY';
+  document.getElementById('lastRunTime').textContent = new Date().toTimeString().slice(0,8);
+  btn.disabled = false; btn.textContent = '▶ 執行 AI 分析';
+
+  // email
+  if (s.serviceId && s.email && Object.keys(analysisResults).length) sendEmail(hasStrong, s);
+}
+
+// ═══════════════════════════════════════════════════════
+// EMAIL
+// ═══════════════════════════════════════════════════════
+function sendEmail(hasStrong, s) {
+  const now = new Date().toLocaleString('zh-TW');
+  const lines = [`Signal Core v2 分析報告\n時間：${now}\n${'─'.repeat(36)}`];
+  Object.entries(analysisResults).forEach(([sym,{price,analysis:a}])=>{
+    const fmt = n=>n>100?n.toLocaleString():n.toFixed(4);
+    lines.push(`\n[${sym.replace('USDT','')}] $${price.toLocaleString()}`);
+    lines.push(` 信號：${a.signal} | 信心：${a.confidence}% | 風險：${a.risk}`);
+    lines.push(` SMC：${a.smcBias} | ${a.tfAlignment} | ${a.pdZone||''}`);
+    lines.push(` Entry：$${fmt(a.entry)} | SL：$${fmt(a.stopLoss)}`);
+    lines.push(` TP1：$${fmt(a.takeProfit1)} | TP2：$${fmt(a.takeProfit2)} | 槓桿：${a.leverage}x`);
+    lines.push(` ${a.summary}`);
+  });
+
+  emailjs.init(s.publicKey);
+  emailjs.send(s.serviceId, s.templateId, {
+    to_email: s.email,
+    subject: hasStrong ? `🔥 [Signal Core v2] 強烈信號！${new Date().toTimeString().slice(0,5)}` : `📊 [Signal Core v2] 市場分析 ${new Date().toTimeString().slice(0,5)}`,
+    message: lines.join('\n')
+  }).then(()=>log('Email 寄出成功','ok')).catch(e=>log('Email 失敗: '+e.text,'err'));
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTO SCAN
+// ═══════════════════════════════════════════════════════
+function toggleAuto() {
+  isAutoOn = !isAutoOn;
+  const toggle = document.getElementById('autoToggle');
+  const nextLabel = document.getElementById('nextRunLabel');
+  toggle.classList.toggle('active', isAutoOn);
+  if (isAutoOn) {
+    const h = parseInt(document.getElementById('scanInterval').value);
+    nextLabel.style.display = 'inline';
+    function schedNext() {
+      const next = new Date(Date.now()+h*3600000);
+      nextLabel.textContent = `NEXT ${next.toTimeString().slice(0,5)}`;
+      autoInterval = setTimeout(()=>{ runAnalysis(); schedNext(); }, h*3600000);
+    }
+    schedNext(); log(`自動掃描：每 ${h}h 執行一次`,'ok');
+  } else {
+    clearTimeout(autoInterval); nextLabel.style.display = 'none';
+    log('自動掃描已停止','warn');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LOG TRADE MODAL
+// ═══════════════════════════════════════════════════════
+function openLogModal(sym, price, analysis) {
+  modalPendingTrade = { sym, price, analysis };
+  selectedModalResult = null;
+  document.querySelectorAll('.modal-overlay .result-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('modalRR').value = '';
+  document.getElementById('modalNote').value = '';
+
+  const a = analysis;
+  const fmt = n=>n>100?n.toLocaleString():n.toFixed(4);
+  document.getElementById('modalPrefill').innerHTML =
+    `${sym.replace('USDT','')} | ${a.signal} | 信心：${a.confidence}% | ${a.smcBias||''}<br>`+
+    `Entry: $${fmt(a.entry)} / SL: $${fmt(a.stopLoss)} / TP1: $${fmt(a.takeProfit1)}`;
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); modalPendingTrade = null; }
+
+function selModalResult(btn) {
+  document.querySelectorAll('.modal-overlay .result-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel'); selectedModalResult = btn.dataset.r;
+}
+
+function submitModalTrade() {
+  if (!selectedModalResult) { alert('請選擇交易結果'); return; }
+  if (!modalPendingTrade) return;
+  const {sym, price, analysis:a} = modalPendingTrade;
+  const trade = {
+    id: Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    sym: sym.replace('USDT',''),
+    dir: a.signal,
+    tf: getSettings().timeframe||'1h',
+    bias: a.smcBias||'其他',
+    pdZone: a.pdZone||'EQUILIBRIUM',
+    rsi: null,
+    align: a.tfAlignment,
+    entry: a.entry,
+    sl: a.stopLoss,
+    tp: a.takeProfit1,
+    leverage: a.leverage,
+    result: selectedModalResult,
+    rr: parseFloat(document.getElementById('modalRR').value)||0,
+    note: document.getElementById('modalNote').value
+  };
+  const trades = getTrades();
+  trades.unshift(trade);
+  saveTrades(trades);
+  closeModal();
+  log(`記錄交易：${trade.sym} ${trade.dir} → ${trade.result}`,'ok');
+  renderJournal();
+}
+
+// ═══════════════════════════════════════════════════════
+// JOURNAL FORM
+// ═══════════════════════════════════════════════════════
+function selResult(btn) {
+  document.querySelectorAll('.result-btns .result-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel'); selectedResult = btn.dataset.r;
+}
+
+function submitTrade() {
+  if (!selectedResult) { alert('請選擇交易結果'); return; }
+  const entry = parseFloat(document.getElementById('jEntry').value)||0;
+  const sl = parseFloat(document.getElementById('jSl').value)||0;
+  const tp = parseFloat(document.getElementById('jTp').value)||0;
+  const rsi = parseFloat(document.getElementById('jRsi').value)||null;
+  const rr = parseFloat(document.getElementById('jRR').value)||0;
+
+  const trade = {
+    id: Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    sym: document.getElementById('jSymbol').value,
+    dir: document.getElementById('jDir').value,
+    tf: document.getElementById('jTf').value,
+    leverage: parseInt(document.getElementById('jLeverage').value)||5,
+    bias: document.getElementById('jBias').value,
+    pdZone: document.getElementById('jPdZone').value,
+    rsi, align: document.getElementById('jAlign').value,
+    entry, sl, tp,
+    result: selectedResult, rr,
+    note: document.getElementById('jNote').value
+  };
+
+  const trades = getTrades();
+  trades.unshift(trade);
+  saveTrades(trades);
+  selectedResult = null;
+  document.querySelectorAll('.result-btns .result-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('jEntry').value='';
+  document.getElementById('jSl').value='';
+  document.getElementById('jTp').value='';
+  document.getElementById('jRsi').value='';
+  document.getElementById('jRR').value='';
+  document.getElementById('jNote').value='';
+  log(`記錄交易：${trade.sym} ${trade.dir} → ${trade.result}`,'ok');
+  renderJournal();
+}
+
+function deleteTrade(id) {
+  const trades = getTrades().filter(t=>t.id!==id);
+  saveTrades(trades); renderJournal();
+}
+
+function clearAllTrades() {
+  if (confirm('確定清除所有交易記錄？')) { saveTrades([]); renderJournal(); }
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER JOURNAL
+// ═══════════════════════════════════════════════════════
+function renderJournal() {
+  const trades = getTrades();
+  const stats = calcTradeStats(trades);
+
+  document.getElementById('tradeCount').textContent = `${trades.length} 筆記錄`;
+
+  if (stats) {
+    document.getElementById('statWR').textContent = stats.wr + '%';
+    document.getElementById('statRR').textContent = stats.avgRR;
+    document.getElementById('statTotal').textContent = stats.total;
+
+    // insights
+    const insightBox = document.getElementById('aiInsight');
+    if (stats.insights.length) {
+      insightBox.style.display = 'block';
+      document.getElementById('insightText').innerHTML = stats.insights.join('<br>');
+    } else {
+      insightBox.style.display = 'none';
+    }
+
+    // pattern grid
+    const pg = document.getElementById('patternGrid');
+    const biasEntries = Object.entries(stats.biasMap).sort((a,b)=>(b[1].w+b[1].l)-(a[1].w+a[1].l));
+    if (biasEntries.length) {
+      pg.innerHTML = biasEntries.map(([bias, {w,l}]) => {
+        const total=w+l; const pct=total?((w/total)*100).toFixed(0):0;
+        const color = +pct>=65?'var(--green)':+pct>=45?'var(--yellow)':'var(--red)';
+        return `<div class="pattern-row">
+          <span class="pattern-name">${bias}</span>
+          <div class="pattern-bar-wrap"><div class="pattern-bar" style="width:${pct}%;background:${color};"></div></div>
+          <span class="pattern-wr" style="color:${color}">${pct}%</span>
+          <span class="pattern-n">${total}筆</span>
+        </div>`;
+      }).join('');
+    } else {
+      pg.innerHTML = '<div class="empty-state">尚無足夠資料</div>';
+    }
+  } else {
+    document.getElementById('statWR').textContent = '—';
+    document.getElementById('statRR').textContent = '—';
+    document.getElementById('statTotal').textContent = trades.length;
+    document.getElementById('aiInsight').style.display = 'none';
+    document.getElementById('patternGrid').innerHTML = '<div class="empty-state">需要至少 3 筆完結交易</div>';
+  }
+
+  // trade list
+  const tl = document.getElementById('tradeList');
+  if (!trades.length) {
+    tl.innerHTML = '<div class="empty-state">尚無交易記錄<br><span style="color:var(--muted);font-size:0.62rem;">新增記錄後 Bot 將學習你的交易模式</span></div>';
+    return;
+  }
+  tl.innerHTML = trades.map(t => {
+    const rc = {WIN:'win',LOSS:'loss',BREAKEVEN:'breakeven'}[t.result]||'';
+    const rrStr = t.rr>0?(t.result==='WIN'?'+':'-')+'R'+t.rr:'—';
+    const rrClass = t.result==='WIN'?'win':t.result==='LOSS'?'loss':'';
+    return `<div class="trade-item ${rc}">
+      <span class="trade-sym">${t.sym}</span>
+      <span class="trade-dir ${(t.dir||'').toLowerCase()}">${t.dir}</span>
+      <span class="trade-meta">${t.date} | ${t.bias||''} | ${t.pdZone||''}</span>
+      <span class="trade-rr ${rrClass}">${rrStr}</span>
+      <button class="trade-del" onclick="deleteTrade(${t.id})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+initCards();
+loadSettings();
+renderJournal();
+
+// Startup diagnostics
+(function() {
+  const origin = window.location.origin;
+  const proto = window.location.protocol;
+  if (proto === 'file:') {
+    log('⚠ 偵測到 file:// 模式 — Claude API 呼叫將因 CORS 被擋，請部署到 GitHub Pages', 'err');
+  } else {
+    log('Origin: ' + origin, 'info');
+  }
+})();
+</script>
+</body>
+</html>
