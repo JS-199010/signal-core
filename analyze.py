@@ -24,19 +24,33 @@ LIMIT     = 300
 # Bybit interval mapping
 BYBIT_INTERVAL = {'1m':'1','5m':'5','15m':'15','1h':'60','4h':'240','1d':'D','1w':'W'}
 
+def _get(url, timeout=15, retries=3):
+    """帶 retry 的 GET，自動重試 3 次"""
+    import time
+    for attempt in range(retries):
+        try:
+            res = requests.get(url, timeout=timeout,
+                headers={'User-Agent': 'Mozilla/5.0 SignalCore/1.0'})
+            if not res.text.strip():
+                raise Exception(f"回傳空白 (HTTP {res.status_code})")
+            return res.json()
+        except Exception as e:
+            print(f"  [retry {attempt+1}/{retries}] {e}")
+            if attempt < retries - 1:
+                time.sleep(3 * (attempt + 1))
+    raise Exception(f"連線失敗，已重試 {retries} 次: {url}")
+
 def fetch_klines(symbol, interval, limit=300):
     bybit_sym = symbol.replace('USDT', '') + 'USDT'
     bybit_iv  = BYBIT_INTERVAL.get(interval, '240')
     url = (f'https://api.bybit.com/v5/market/kline'
            f'?category=linear&symbol={bybit_sym}&interval={bybit_iv}&limit={limit}')
-    res = requests.get(url, timeout=10)
-    data = res.json()
+    data = _get(url)
     if data.get('retCode') != 0:
         raise Exception(f"Bybit API 錯誤: {data.get('retMsg', data)}")
     rows = data['result']['list']
     if not rows:
         raise Exception(f"Bybit 回傳空資料: {bybit_sym}")
-    # Bybit returns newest first, reverse to oldest first
     rows = list(reversed(rows))
     try:
         return [{'t':int(k[0]),'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in rows]
@@ -46,7 +60,7 @@ def fetch_klines(symbol, interval, limit=300):
 def fetch_price(symbol):
     bybit_sym = symbol.replace('USDT','') + 'USDT'
     url = f'https://api.bybit.com/v5/market/tickers?category=linear&symbol={bybit_sym}'
-    data = requests.get(url, timeout=5).json()
+    data = _get(url, timeout=10)
     if data.get('retCode') != 0:
         raise Exception(f"Bybit ticker 錯誤: {data.get('retMsg')}")
     return float(data['result']['list'][0]['lastPrice'])
