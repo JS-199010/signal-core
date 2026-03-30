@@ -1,0 +1,64 @@
+name: Signal Core — Auto Analysis
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests anthropic
+
+      - name: Restore last signals
+        uses: actions/cache@v4
+        with:
+          path: last_signals.json
+          key: signals-cache-${{ github.run_number }}
+          restore-keys: signals-cache-
+
+      - name: Load last signals into env
+        run: |
+          if [ -f last_signals.json ]; then
+            echo "LAST_SIGNALS=$(cat last_signals.json)" >> $GITHUB_ENV
+            echo "已載入上次信號"
+          else
+            echo "LAST_SIGNALS=" >> $GITHUB_ENV
+            echo "首次執行，無上次信號"
+          fi
+
+      - name: Run analysis
+        env:
+          CLAUDE_API_KEY:     ${{ secrets.CLAUDE_API_KEY }}
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python analyze.py
+
+      - name: Save current signals
+        run: |
+          python3 -c "
+          import os, json
+          raw = os.environ.get('LAST_SIGNALS', '')
+          # read from analyze output file
+          if os.path.exists('current_signals.json'):
+              print('signals file found')
+          "
+          if [ -f current_signals.json ]; then
+            cp current_signals.json last_signals.json
+            echo "信號已儲存"
+          fi
