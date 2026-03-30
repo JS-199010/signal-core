@@ -21,49 +21,54 @@ TF2       = '1d'
 LIMIT     = 300
 
 # ── Binance ────────────────────────────────────────────
-# Bybit interval mapping
-BYBIT_INTERVAL = {'1m':'1','5m':'5','15m':'15','1h':'60','4h':'240','1d':'D','1w':'W'}
+# CoinGecko coin ID mapping
+COINGECKO_ID = {
+    'BTCUSDT':  'bitcoin',
+    'ETHUSDT':  'ethereum',
+    'SOLUSDT':  'solana',
+    'PAXGUSDT': 'pax-gold',
+}
+# CoinGecko interval mapping (days needed for limit candles)
+CG_DAYS = {'15m': 1, '1h': 14, '4h': 90, '1d': 300}
 
 def _get(url, timeout=15, retries=3):
-    """帶 retry 的 GET，自動重試 3 次"""
     import time
     for attempt in range(retries):
         try:
             res = requests.get(url, timeout=timeout,
-                headers={'User-Agent': 'Mozilla/5.0 SignalCore/1.0'})
+                headers={'User-Agent': 'SignalCore/1.0'})
             if not res.text.strip():
-                raise Exception(f"回傳空白 (HTTP {res.status_code})")
+                raise Exception(f"空白回應 HTTP {res.status_code}")
             return res.json()
         except Exception as e:
             print(f"  [retry {attempt+1}/{retries}] {e}")
             if attempt < retries - 1:
-                time.sleep(3 * (attempt + 1))
-    raise Exception(f"連線失敗，已重試 {retries} 次: {url}")
+                time.sleep(4 * (attempt + 1))
+    raise Exception(f"連線失敗已重試{retries}次")
 
 def fetch_klines(symbol, interval, limit=300):
-    bybit_sym = symbol.replace('USDT', '') + 'USDT'
-    bybit_iv  = BYBIT_INTERVAL.get(interval, '240')
-    url = (f'https://api.bybit.com/v5/market/kline'
-           f'?category=linear&symbol={bybit_sym}&interval={bybit_iv}&limit={limit}')
+    cg_id = COINGECKO_ID.get(symbol)
+    if not cg_id:
+        raise Exception(f"未支援的幣種: {symbol}")
+    days = CG_DAYS.get(interval, 90)
+    # CoinGecko OHLC endpoint
+    url = f'https://api.coingecko.com/api/v3/coins/{cg_id}/ohlc?vs_currency=usd&days={days}'
     data = _get(url)
-    if data.get('retCode') != 0:
-        raise Exception(f"Bybit API 錯誤: {data.get('retMsg', data)}")
-    rows = data['result']['list']
-    if not rows:
-        raise Exception(f"Bybit 回傳空資料: {bybit_sym}")
-    rows = list(reversed(rows))
-    try:
-        return [{'t':int(k[0]),'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in rows]
-    except (ValueError, IndexError) as e:
-        raise Exception(f"K線解析失敗: {e} | 原始: {str(rows[0])[:100]}")
+    if not isinstance(data, list) or len(data) == 0:
+        raise Exception(f"CoinGecko 回傳異常: {str(data)[:100]}")
+    # data = [[timestamp_ms, open, high, low, close], ...]
+    # filter to last `limit` candles
+    data = data[-limit:]
+    return [{'t': int(k[0]), 'o': float(k[1]), 'h': float(k[2]),
+             'l': float(k[3]), 'c': float(k[4]), 'v': 0.0} for k in data]
 
 def fetch_price(symbol):
-    bybit_sym = symbol.replace('USDT','') + 'USDT'
-    url = f'https://api.bybit.com/v5/market/tickers?category=linear&symbol={bybit_sym}'
+    cg_id = COINGECKO_ID.get(symbol)
+    if not cg_id:
+        raise Exception(f"未支援的幣種: {symbol}")
+    url = f'https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd'
     data = _get(url, timeout=10)
-    if data.get('retCode') != 0:
-        raise Exception(f"Bybit ticker 錯誤: {data.get('retMsg')}")
-    return float(data['result']['list'][0]['lastPrice'])
+    return float(data[cg_id]['usd'])
 
 # ── 傳統指標 ───────────────────────────────────────────
 def calc_sma(closes, p):
@@ -103,6 +108,7 @@ def calc_atr(klines, p=14):
 
 def vol_ratio(klines):
     avg=sum(k['v'] for k in klines[-10:])/10
+    if avg == 0: return 1.0  # CoinGecko OHLC doesn't include volume
     return round(klines[-1]['v']/avg,2)
 
 # ── SMC ────────────────────────────────────────────────
