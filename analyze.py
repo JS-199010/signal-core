@@ -21,6 +21,8 @@ TF2       = '1d'
 LIMIT     = 300
 
 # ── Binance ────────────────────────────────────────────
+import time as _time
+
 # CoinGecko coin ID mapping
 COINGECKO_ID = {
     'BTCUSDT':  'bitcoin',
@@ -28,36 +30,43 @@ COINGECKO_ID = {
     'SOLUSDT':  'solana',
     'PAXGUSDT': 'pax-gold',
 }
-# CoinGecko interval mapping (days needed for limit candles)
-CG_DAYS = {'15m': 1, '1h': 14, '4h': 90, '1d': 300}
+# CoinGecko OHLC granularity: days=1→30min, days=7→4h, days=max→4h(>90d)
+CG_DAYS = {'15m': 1, '1h': 7, '4h': 'max', '1d': 'max'}
 
-def _get(url, timeout=15, retries=3):
-    import time
+_last_cg_call = 0
+
+def _get(url, timeout=20, retries=3):
+    global _last_cg_call
+    # Rate limit: wait at least 2s between CoinGecko calls
+    elapsed = _time.time() - _last_cg_call
+    if elapsed < 2.5:
+        _time.sleep(2.5 - elapsed)
     for attempt in range(retries):
         try:
             res = requests.get(url, timeout=timeout,
                 headers={'User-Agent': 'SignalCore/1.0'})
+            _last_cg_call = _time.time()
             if not res.text.strip():
                 raise Exception(f"空白回應 HTTP {res.status_code}")
-            return res.json()
+            data = res.json()
+            if isinstance(data, dict) and data.get('status', {}).get('error_code') == 429:
+                raise Exception("Rate limit 429，等待重試")
+            return data
         except Exception as e:
             print(f"  [retry {attempt+1}/{retries}] {e}")
             if attempt < retries - 1:
-                time.sleep(4 * (attempt + 1))
-    raise Exception(f"連線失敗已重試{retries}次")
+                _time.sleep(10 * (attempt + 1))
+    raise Exception(f"連線失敗已重試 {retries} 次")
 
 def fetch_klines(symbol, interval, limit=300):
     cg_id = COINGECKO_ID.get(symbol)
     if not cg_id:
         raise Exception(f"未支援的幣種: {symbol}")
-    days = CG_DAYS.get(interval, 90)
-    # CoinGecko OHLC endpoint
+    days = CG_DAYS.get(interval, 'max')
     url = f'https://api.coingecko.com/api/v3/coins/{cg_id}/ohlc?vs_currency=usd&days={days}'
     data = _get(url)
     if not isinstance(data, list) or len(data) == 0:
         raise Exception(f"CoinGecko 回傳異常: {str(data)[:100]}")
-    # data = [[timestamp_ms, open, high, low, close], ...]
-    # filter to last `limit` candles
     data = data[-limit:]
     return [{'t': int(k[0]), 'o': float(k[1]), 'h': float(k[2]),
              'l': float(k[3]), 'c': float(k[4]), 'v': 0.0} for k in data]
