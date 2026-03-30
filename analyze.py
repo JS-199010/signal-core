@@ -21,63 +21,58 @@ TF2       = '1d'
 LIMIT     = 300
 
 # ── Binance ────────────────────────────────────────────
-import time as _time
-
-# CoinGecko coin ID mapping
-COINGECKO_ID = {
-    'BTCUSDT':  'bitcoin',
-    'ETHUSDT':  'ethereum',
-    'SOLUSDT':  'solana',
-    'PAXGUSDT': 'pax-gold',
+# Kraken pair mapping (no geo restriction, no API key needed)
+KRAKEN_PAIR = {
+    'BTCUSDT':  'XBTUSD',
+    'ETHUSDT':  'ETHUSD',
+    'SOLUSDT':  'SOLUSD',
+    'PAXGUSDT': 'PAXGUSD',
 }
-# CoinGecko OHLC granularity: days=1→30min, days=7→4h, days=max→4h(>90d)
-CG_DAYS = {'15m': 1, '1h': 7, '4h': 'max', '1d': 'max'}
-
-_last_cg_call = 0
+# Kraken interval in minutes
+KRAKEN_INTERVAL = {'15m': 15, '1h': 60, '4h': 240, '1d': 1440}
 
 def _get(url, timeout=20, retries=3):
-    global _last_cg_call
-    # Rate limit: wait at least 2s between CoinGecko calls
-    elapsed = _time.time() - _last_cg_call
-    if elapsed < 2.5:
-        _time.sleep(2.5 - elapsed)
+    import time
     for attempt in range(retries):
         try:
             res = requests.get(url, timeout=timeout,
                 headers={'User-Agent': 'SignalCore/1.0'})
-            _last_cg_call = _time.time()
             if not res.text.strip():
                 raise Exception(f"空白回應 HTTP {res.status_code}")
-            data = res.json()
-            if isinstance(data, dict) and data.get('status', {}).get('error_code') == 429:
-                raise Exception("Rate limit 429，等待重試")
-            return data
+            return res.json()
         except Exception as e:
             print(f"  [retry {attempt+1}/{retries}] {e}")
             if attempt < retries - 1:
-                _time.sleep(10 * (attempt + 1))
+                import time as t; t.sleep(5 * (attempt + 1))
     raise Exception(f"連線失敗已重試 {retries} 次")
 
 def fetch_klines(symbol, interval, limit=300):
-    cg_id = COINGECKO_ID.get(symbol)
-    if not cg_id:
+    pair = KRAKEN_PAIR.get(symbol)
+    if not pair:
         raise Exception(f"未支援的幣種: {symbol}")
-    days = CG_DAYS.get(interval, 'max')
-    url = f'https://api.coingecko.com/api/v3/coins/{cg_id}/ohlc?vs_currency=usd&days={days}'
+    iv = KRAKEN_INTERVAL.get(interval, 240)
+    url = f'https://api.kraken.com/0/public/OHLC?pair={pair}&interval={iv}'
     data = _get(url)
-    if not isinstance(data, list) or len(data) == 0:
-        raise Exception(f"CoinGecko 回傳異常: {str(data)[:100]}")
-    data = data[-limit:]
-    return [{'t': int(k[0]), 'o': float(k[1]), 'h': float(k[2]),
-             'l': float(k[3]), 'c': float(k[4]), 'v': 0.0} for k in data]
+    if data.get('error'):
+        raise Exception(f"Kraken 錯誤: {data['error']}")
+    # result key is the pair name (may differ slightly)
+    result_key = list(data['result'].keys())[0]
+    rows = data['result'][result_key]
+    # Kraken OHLC: [time, open, high, low, close, vwap, volume, count]
+    rows = rows[-limit:]
+    return [{'t': int(k[0])*1000, 'o': float(k[1]), 'h': float(k[2]),
+             'l': float(k[3]), 'c': float(k[4]), 'v': float(k[6])} for k in rows]
 
 def fetch_price(symbol):
-    cg_id = COINGECKO_ID.get(symbol)
-    if not cg_id:
+    pair = KRAKEN_PAIR.get(symbol)
+    if not pair:
         raise Exception(f"未支援的幣種: {symbol}")
-    url = f'https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd'
+    url = f'https://api.kraken.com/0/public/Ticker?pair={pair}'
     data = _get(url, timeout=10)
-    return float(data[cg_id]['usd'])
+    if data.get('error'):
+        raise Exception(f"Kraken ticker 錯誤: {data['error']}")
+    result_key = list(data['result'].keys())[0]
+    return float(data['result'][result_key]['c'][0])
 
 # ── 傳統指標 ───────────────────────────────────────────
 def calc_sma(closes, p):
@@ -116,9 +111,9 @@ def calc_atr(klines, p=14):
     return round(sum(trs[-p:])/p,4)
 
 def vol_ratio(klines):
-    avg=sum(k['v'] for k in klines[-10:])/10
-    if avg == 0: return 1.0  # CoinGecko OHLC doesn't include volume
-    return round(klines[-1]['v']/avg,2)
+    avg = sum(k['v'] for k in klines[-10:]) / 10
+    if avg == 0: return 1.0
+    return round(klines[-1]['v'] / avg, 2)
 
 # ── SMC ────────────────────────────────────────────────
 def find_swings(klines, lb=5):
