@@ -23,8 +23,16 @@ LIMIT     = 300
 # ── Binance ────────────────────────────────────────────
 def fetch_klines(symbol, interval, limit=300):
     url = f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}'
-    data = requests.get(url, timeout=10).json()
-    return [{'t':k[0],'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in data]
+    res = requests.get(url, timeout=10)
+    data = res.json()
+    if isinstance(data, dict) and 'code' in data:
+        raise Exception(f"Binance API 錯誤: {data.get('msg', data)}")
+    if not isinstance(data, list) or len(data) == 0:
+        raise Exception(f"Binance 回傳格式異常: {str(data)[:100]}")
+    try:
+        return [{'t':k[0],'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in data]
+    except (ValueError, IndexError) as e:
+        raise Exception(f"K線資料解析失敗: {e} | 原始: {str(data[0])[:100]}")
 
 def fetch_price(symbol):
     return float(requests.get(f'https://api.binance.com/api/v3/ticker/price?symbol={symbol}', timeout=5).json()['price'])
@@ -229,9 +237,11 @@ def send_email(subject, body, consistent):
 
     msg.attach(MIMEText(body,'plain','utf-8'))
     msg.attach(MIMEText(html,'html','utf-8'))
-    with smtplib.SMTP_SSL('smtp.gmail.com',465) as s:
-        s.login(GMAIL_USER,GMAIL_APP_PWD)
-        s.sendmail(GMAIL_USER,EMAIL_TO,msg.as_string())
+    print(f"SMTP 連線中... user={GMAIL_USER}, to={EMAIL_TO}")
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+        s.login(GMAIL_USER, GMAIL_APP_PWD)
+        s.sendmail(GMAIL_USER, EMAIL_TO, msg.as_string())
+    print("SMTP 寄送完成")
 
 # ── 主程式 ─────────────────────────────────────────────
 def main():
@@ -295,7 +305,9 @@ def main():
         send_email(subject,'\n'.join(lines),consistent)
         print("Email ✓ 成功")
     except Exception as e:
+        import traceback
         print(f"Email ✗ 失敗：{e}")
+        traceback.print_exc()
 
 if __name__=='__main__':
     main()
