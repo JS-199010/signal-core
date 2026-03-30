@@ -21,21 +21,35 @@ TF2       = '1d'
 LIMIT     = 300
 
 # ── Binance ────────────────────────────────────────────
+# Bybit interval mapping
+BYBIT_INTERVAL = {'1m':'1','5m':'5','15m':'15','1h':'60','4h':'240','1d':'D','1w':'W'}
+
 def fetch_klines(symbol, interval, limit=300):
-    url = f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}'
+    bybit_sym = symbol.replace('USDT', '') + 'USDT'
+    bybit_iv  = BYBIT_INTERVAL.get(interval, '240')
+    url = (f'https://api.bybit.com/v5/market/kline'
+           f'?category=linear&symbol={bybit_sym}&interval={bybit_iv}&limit={limit}')
     res = requests.get(url, timeout=10)
     data = res.json()
-    if isinstance(data, dict) and 'code' in data:
-        raise Exception(f"Binance API 錯誤: {data.get('msg', data)}")
-    if not isinstance(data, list) or len(data) == 0:
-        raise Exception(f"Binance 回傳格式異常: {str(data)[:100]}")
+    if data.get('retCode') != 0:
+        raise Exception(f"Bybit API 錯誤: {data.get('retMsg', data)}")
+    rows = data['result']['list']
+    if not rows:
+        raise Exception(f"Bybit 回傳空資料: {bybit_sym}")
+    # Bybit returns newest first, reverse to oldest first
+    rows = list(reversed(rows))
     try:
-        return [{'t':k[0],'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in data]
+        return [{'t':int(k[0]),'o':float(k[1]),'h':float(k[2]),'l':float(k[3]),'c':float(k[4]),'v':float(k[5])} for k in rows]
     except (ValueError, IndexError) as e:
-        raise Exception(f"K線資料解析失敗: {e} | 原始: {str(data[0])[:100]}")
+        raise Exception(f"K線解析失敗: {e} | 原始: {str(rows[0])[:100]}")
 
 def fetch_price(symbol):
-    return float(requests.get(f'https://api.binance.com/api/v3/ticker/price?symbol={symbol}', timeout=5).json()['price'])
+    bybit_sym = symbol.replace('USDT','') + 'USDT'
+    url = f'https://api.bybit.com/v5/market/tickers?category=linear&symbol={bybit_sym}'
+    data = requests.get(url, timeout=5).json()
+    if data.get('retCode') != 0:
+        raise Exception(f"Bybit ticker 錯誤: {data.get('retMsg')}")
+    return float(data['result']['list'][0]['lastPrice'])
 
 # ── 傳統指標 ───────────────────────────────────────────
 def calc_sma(closes, p):
