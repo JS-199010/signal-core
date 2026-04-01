@@ -16,6 +16,15 @@ GMAIL_APP_PWD = os.environ['GMAIL_APP_PASSWORD']
 EMAIL_TO      = os.environ['EMAIL_TO']
 
 SYMBOLS   = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'PAXGUSDT']
+
+def get_kill_zone():
+    hour = datetime.now(timezone.utc).hour
+    if 0 <= hour < 3:   return "Asian Kill Zone（00-03 UTC）流動性建立期，注意假突破"
+    if 7 <= hour < 10:  return "London Kill Zone（07-10 UTC）機構最活躍，OB/FVG 回測機率高"
+    if 13 <= hour < 16: return "New York Kill Zone（13-16 UTC）第二強時段，趨勢延續或反轉"
+    if 15 <= hour < 17: return "London Close（15-17 UTC）短線反轉機會，注意流動性獵殺"
+    return "非 Kill Zone 時段（手動觸發）"
+
 TIMEFRAME = '4h'
 TF2       = '1d'
 LIMIT     = 300
@@ -209,9 +218,11 @@ def build_tf_text(klines, tf):
 # ── Claude ─────────────────────────────────────────────
 def analyze(symbol, price, tf1, tf2):
     gold=(" （黃金代幣，走勢與實物黃金相關，槓桿保守最高10x）" if symbol=="PAXGUSDT" else "")
+    kz = get_kill_zone()
     prompt=f"""你是一位專業的加密貨幣合約交易分析師，精通 SMC 與多時間框架共振分析。
 
 幣種：{symbol}｜當前價格：${price}{gold}
+當前時段：{kz}
 
 ━━━ 短週期（入場時機）━━━
 {tf1}
@@ -283,8 +294,21 @@ def send_email(subject, body, consistent):
 
 # ── 主程式 ─────────────────────────────────────────────
 def main():
-    now=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.strftime('%Y-%m-%d %H:%M UTC')
     print(f"\n{'='*50}\nSignal Core：{now}\n{'='*50}")
+
+    # 檢查是否到了執行時間（依 RUN_INTERVAL_HOURS 判斷）
+    interval = int(os.environ.get('RUN_INTERVAL_HOURS', '4'))
+    trigger = os.environ.get('GITHUB_EVENT_NAME', '')
+    if trigger != 'workflow_dispatch':
+        # 自動觸發：只在整點小時是 interval 倍數時執行
+        current_hour = now_dt.hour
+        if current_hour % interval != 0:
+            print(f"目前 {current_hour}:00 UTC，不是 {interval} 小時間隔，跳過本次執行")
+            print(f"下次執行時間：{interval - (current_hour % interval)} 小時後")
+            return
+        print(f"✓ {current_hour}:00 UTC，符合每 {interval} 小時執行條件")
 
     last=load_last_signals()
     current={}; results=[]
@@ -317,10 +341,9 @@ def main():
 
     print(f"一致信號：{consistent or '無'} | 強烈信號：{'是' if has_strong else '否'}")
 
-    # 無上次記錄（第一次）或有一致/強烈信號才寄信
-    should_send = not last or bool(consistent) or has_strong
-    if not should_send:
-        print("⚠ 信號與上次不一致且無強烈信號，跳過寄信")
+    # 有強烈信號（信心 >= 70% 且非 NEUTRAL）才寄信
+    if not has_strong:
+        print("⚠ 無強烈信號（信心 < 70% 或全部 NEUTRAL），跳過寄信")
         return
 
     lines=[f"Signal Core AI 分析報告",f"時間：{now}","="*40]
@@ -337,8 +360,7 @@ def main():
                 f"  槓桿：{a['leverage']}x",
                 f"  📊 {a['summary']}"]
 
-    subject=(f"🔥 [Signal Core] 強烈信號！{now}" if has_strong
-             else f"📊 [Signal Core] 一致信號確認 {now}")
+    subject = f"🔥 [Signal Core] 強烈信號！{get_kill_zone().split("（")[0].strip()} | {now}"
     try:
         send_email(subject,'\n'.join(lines),consistent)
         print("Email ✓ 成功")
