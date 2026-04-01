@@ -2,7 +2,10 @@ name: Signal Core — Auto Analysis
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 0 * * *'    # Asian KZ    00:00 UTC = 台灣 08:00
+    - cron: '0 7 * * *'    # London KZ   07:00 UTC = 台灣 15:00
+    - cron: '0 13 * * *'   # NY KZ       13:00 UTC = 台灣 21:00
+    - cron: '0 15 * * *'   # London Close 15:00 UTC = 台灣 23:00
   workflow_dispatch:
 
 jobs:
@@ -35,10 +38,8 @@ jobs:
         run: |
           if [ -f last_signals.json ]; then
             echo "LAST_SIGNALS=$(cat last_signals.json)" >> $GITHUB_ENV
-            echo "已載入上次信號"
           else
             echo "LAST_SIGNALS=" >> $GITHUB_ENV
-            echo "首次執行，無上次信號"
           fi
 
       - name: Run analysis
@@ -51,14 +52,6 @@ jobs:
 
       - name: Save current signals
         run: |
-          python3 -c "
-          import os, json
-          raw = os.environ.get('LAST_SIGNALS', '')
-          # read from analyze output file
-          if os.path.exists('current_signals.json'):
-              print('signals file found')
-          "
           if [ -f current_signals.json ]; then
             cp current_signals.json last_signals.json
-            echo "信號已儲存"
           fi
