@@ -360,7 +360,8 @@ def main():
                 f"  槓桿：{a['leverage']}x",
                 f"  📊 {a['summary']}"]
 
-    subject = f"🔥 [Signal Core] 強烈信號！{get_kill_zone().split("（")[0].strip()} | {now}"
+    kz_name = get_kill_zone().split("(")[0].split("（")[0].strip()
+    subject = f"🔥 [Signal Core] 強烈信號！{kz_name} | {now}"
     try:
         send_email(subject,'\n'.join(lines),consistent)
         print("Email ✓ 成功")
